@@ -6,7 +6,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:uuid/uuid.dart';
 import 'package:open_filex/open_filex.dart';
 import '../models/download_item.dart';
-import '../services/asset_helper.dart';
+import '../services/download_service.dart';
 import '../widgets/download_card.dart';
 import '../widgets/app_icon_widget.dart';
 
@@ -21,12 +21,9 @@ class _HomeScreenState extends State<HomeScreen> {
   final _urlController = TextEditingController();
   final _items = <DownloadItem>[];
   final _uuid = const Uuid();
-  String? _ytDlpPath;
+  final _downloadService = DownloadService();
   String? _saveDir;
   bool _ready = false;
-  int _activeCount = 0;
-  static const int _maxParallel = 3;
-  final _queue = <DownloadItem>[];
 
   @override
   void initState() {
@@ -34,18 +31,17 @@ class _HomeScreenState extends State<HomeScreen> {
     _init();
   }
 
+  @override
+  void dispose() {
+    _downloadService.dispose();
+    _urlController.dispose();
+    super.dispose();
+  }
+
   Future<void> _init() async {
     // 권한
     await Permission.storage.request();
     await Permission.manageExternalStorage.request();
-
-    // yt-dlp 바이너리 준비
-    try {
-      _ytDlpPath = await prepareYtDlp();
-    } catch (e) {
-      _showSnack('yt-dlp 준비 실패: $e');
-      return;
-    }
 
     // 저장 경로: /sdcard/Music/MP3Downloader
     final ext = await getExternalStorageDirectory();
@@ -69,91 +65,11 @@ class _HomeScreenState extends State<HomeScreen> {
     );
     setState(() => _items.insert(0, item));
     _urlController.clear();
-    _enqueue(item);
-  }
-
-  void _enqueue(DownloadItem item) {
-    if (_activeCount < _maxParallel) {
-      _startDownload(item);
-    } else {
-      _queue.add(item);
-    }
-  }
-
-  Future<void> _startDownload(DownloadItem item) async {
-    if (_ytDlpPath == null || _saveDir == null) return;
-    setState(() => _activeCount++);
-
-    try {
-      item.status = DownloadStatus.fetching;
-      _update();
-
-      final output = '$_saveDir/%(title)s.%(ext)s';
-      final args = [
-        '--no-check-certificates',
-        '-x',
-        '--audio-format', 'mp3',
-        '--audio-quality', '0',
-        '--embed-thumbnail',
-        '--add-metadata',
-        '--newline',
-        '-o', output,
-        item.url,
-      ];
-
-      final process = await Process.start(_ytDlpPath!, args);
-      item.status = DownloadStatus.downloading;
-      _update();
-
-      // stdout 파싱
-      process.stdout
-          .transform(const SystemEncoding().decoder)
-          .listen((line) {
-        // 진행률
-        final pctMatch = RegExp(r'([\d.]+)%').firstMatch(line);
-        if (pctMatch != null) {
-          item.progress = (double.tryParse(pctMatch.group(1)!) ?? 0) / 100;
-        }
-        // 속도
-        final spdMatch = RegExp(r'at\s+([\S]+/s)').firstMatch(line);
-        if (spdMatch != null) item.speedLabel = spdMatch.group(1)!;
-
-        // 완성 파일 경로
-        final destMatch = RegExp(r'Destination:\s+(.+\.mp3)').firstMatch(line);
-        if (destMatch != null) {
-          item.filePath = destMatch.group(1)!;
-          item.title = item.filePath!.split('/').last.replaceAll('.mp3', '');
-        }
-        _update();
-      });
-
-      // stderr 수집
-      final errBuf = StringBuffer();
-      process.stderr
-          .transform(const SystemEncoding().decoder)
-          .listen(errBuf.write);
-
-      final code = await process.exitCode;
-      if (code == 0) {
-        item.status = DownloadStatus.done;
-        item.progress = 1.0;
-        item.speedLabel = '';
-      } else {
-        item.status = DownloadStatus.error;
-        item.errorMsg = _cleanError(errBuf.toString());
-      }
-    } catch (e) {
-      item.status = DownloadStatus.error;
-      item.errorMsg = e.toString();
-    }
-
-    setState(() => _activeCount--);
-    _update();
-
-    // 큐에서 다음 항목 시작
-    if (_queue.isNotEmpty) {
-      _startDownload(_queue.removeAt(0));
-    }
+    _downloadService.enqueue(
+      item: item,
+      saveDir: _saveDir!,
+      onUpdate: _update,
+    );
   }
 
   void _update() => setState(() {});
@@ -183,15 +99,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  String _cleanError(String raw) {
-    for (final l in raw.split('\n')) {
-      if (l.contains('ERROR:')) {
-        return l.replaceFirst(RegExp(r'.*ERROR:\s*'), '');
-      }
-    }
-    return raw.length > 100 ? '${raw.substring(0, 100)}...' : raw;
-  }
-
   void _showSnack(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(msg), behavior: SnackBarBehavior.floating),
@@ -201,7 +108,10 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final waiting = _queue.length;
+    final active = _items.where((e) => e.isActive).length;
+    final waiting = _items
+        .where((e) => e.status == DownloadStatus.waiting)
+        .length;
     final done = _items.where((e) => e.status == DownloadStatus.done).length;
 
     return Scaffold(
@@ -210,7 +120,7 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             // ── 헤더 ──────────────────────────────────
             _Header(
-              activeCount: _activeCount,
+              activeCount: active,
               waitingCount: waiting,
               doneCount: done,
             ),
@@ -286,7 +196,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Row(
                   children: [
                     Text(
-                      '${_items.length}개  •  진행 $_activeCount  •  대기 $waiting',
+                      '${_items.length}개  •  진행 $active  •  대기 $waiting',
                       style: TextStyle(
                           fontSize: 12, color: cs.onSurface.withOpacity(0.5)),
                     ),
@@ -406,7 +316,7 @@ class _EmptyState extends StatelessWidget {
               size: 56, color: cs.onSurface.withOpacity(0.15)),
           const SizedBox(height: 16),
           Text(
-            ready ? 'URL을 입력하면\nMP3로 다운로드돼요' : '준비 중...',
+            ready ? 'URL을 입력하면\n오디오 파일로 다운로드돼요' : '준비 중...',
             textAlign: TextAlign.center,
             style: TextStyle(
                 fontSize: 15,

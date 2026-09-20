@@ -21,13 +21,22 @@ dependencies:
   uuid: ^4.3.3
   # URL 유효성 검사
   validators: ^3.0.0
+  youtube_explode_dart: ^3.1.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.0
+  flutter_launcher_icons: ^0.14.3
 
 flutter:
   uses-material-design: true
   assets:
     - assets/icon.svg
+    - assets/icon.png
+
+flutter_launcher_icons:
+  android: true
+  image_path: "assets/icon.png"
+  adaptive_icon_background: "assets/icon_background.png"
+  adaptive_icon_foreground: "assets/icon_foreground.png"

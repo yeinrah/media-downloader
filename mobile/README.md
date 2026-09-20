@@ -1,21 +1,6 @@
 # MP3 Downloader — Flutter Android App
 
-YouTube / Vimeo 영상을 MP3로 다운로드하는 개인용 Android 앱.
-
----
-
-## 빌드 전 필수 준비: yt-dlp ARM64 바이너리
-
-APK에 yt-dlp 바이너리를 포함시켜야 합니다.
-
-```bash
-# assets 폴더에 yt-dlp ARM64 바이너리 다운로드
-curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux_aarch64 \
-     -o assets/yt-dlp
-chmod +x assets/yt-dlp
-```
-
-> ⚠️ 이 파일이 없으면 앱이 실행되지 않습니다.
+YouTube 영상을 오디오로 다운로드하는 개인용 Android 앱.
 
 ---
 
@@ -36,7 +21,7 @@ flutter build apk --release --split-per-abi
 
 ## 앱 기능
 
-- YouTube / Vimeo URL → MP3 자동 변환 다운로드
+- YouTube URL → 오디오 스트림 다운로드 (`youtube_explode_dart` 사용, 네이티브 바이너리 불필요)
 - 최대 3개 동시 다운로드
 - 실시간 진행률 + 속도 표시
 - 다운로드 완료 파일 바로 재생
@@ -49,7 +34,11 @@ flutter build apk --release --split-per-abi
 - Android 8.0 (API 26) 이상 필요
 - 처음 실행 시 저장소 권한 허용 필요
 - Android 11+ 에서는 "모든 파일 접근" 권한도 허용 필요
-- FFmpeg는 yt-dlp에 내장되어 있어 별도 설치 불필요
+- YouTube는 오디오를 원본 코덱(AAC/m4a 또는 Opus/webm) 그대로 제공하므로, 온디바이스
+  인코더 없이는 진짜 `.mp3`로 재인코딩할 수 없습니다. 재생 호환성이 가장 좋은
+  m4a(AAC) 스트림을 우선 선택하고, 없으면 최고 비트레이트 스트림을 원본 확장자
+  그대로 저장합니다.
+- Vimeo는 현재 지원하지 않습니다 (`youtube_explode_dart`는 YouTube 전용).
 
 ---
 
@@ -57,6 +46,7 @@ flutter build apk --release --split-per-abi
 
 | 패키지 | 역할 |
 |---|---|
+| `youtube_explode_dart` | YouTube 영상 정보 조회 및 오디오 스트림 다운로드 |
 | `path_provider` | 저장 경로 |
 | `permission_handler` | 권한 요청 |
 | `open_filex` | 파일 열기 |

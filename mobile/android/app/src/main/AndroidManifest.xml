@@ -35,6 +35,10 @@
             </intent-filter>
         </activity>
 
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2"/>
+
         <!-- 파일 열기용 FileProvider -->
         <provider
             android:name="androidx.core.content.FileProvider"
