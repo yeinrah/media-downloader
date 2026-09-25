@@ -256,20 +256,25 @@ class DownloadService {
     var lastBytes = 0;
     final sw = Stopwatch()..start();
     final sink = destination.openWrite();
-    await for (final chunk in _yt.videos.streamsClient.get(stream)) {
-      sink.add(chunk);
-      received += chunk.length;
-      onProgress(received, total);
-      if (sw.elapsedMilliseconds > 400) {
-        final elapsedSec = sw.elapsedMilliseconds / 1000;
-        onSpeedUpdate(_formatSpeed((received - lastBytes) / elapsedSec));
-        lastBytes = received;
-        sw.reset();
-        onUpdate();
+    try {
+      await for (final chunk in _yt.videos.streamsClient.get(stream)) {
+        sink.add(chunk);
+        received += chunk.length;
+        onProgress(received, total);
+        if (sw.elapsedMilliseconds > 400) {
+          final elapsedSec = sw.elapsedMilliseconds / 1000;
+          onSpeedUpdate(_formatSpeed((received - lastBytes) / elapsedSec));
+          lastBytes = received;
+          sw.reset();
+          onUpdate();
+        }
       }
+    } finally {
+      // close() flushes any buffered bytes before closing, so this alone
+      // guarantees the file handle is released on both the success and
+      // error paths (e.g. a network failure mid-transfer).
+      await sink.close();
     }
-    await sink.flush();
-    await sink.close();
   }
 
   AudioOnlyStreamInfo? _pickAudioStream(StreamManifest manifest) {
