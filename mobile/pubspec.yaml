@@ -22,6 +22,12 @@ dependencies:
   # URL 유효성 검사
   validators: ^3.0.0
   youtube_explode_dart: ^3.1.0
+  # 오디오 인코딩(mp3) / 영상+오디오 먹싱(mp4)
+  ffmpeg_kit_flutter_new: ^3.2.0
+  # 저장 위치 선택 (Android SAF)
+  saf: ^2.1.0
+  # 형식/화질/저장 위치 설정 영속화
+  shared_preferences: ^2.3.0
 
 dev_dependencies:
   flutter_test:
