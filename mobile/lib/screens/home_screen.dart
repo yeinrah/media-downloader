@@ -3,12 +3,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:saf/saf.dart';
 import 'package:uuid/uuid.dart';
 import 'package:open_filex/open_filex.dart';
 import '../models/download_item.dart';
+import '../models/download_options.dart';
 import '../services/download_service.dart';
+import '../services/settings_service.dart';
 import '../widgets/download_card.dart';
 import '../widgets/app_icon_widget.dart';
+import '../widgets/format_quality_selector.dart';
+import '../widgets/save_location_bar.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -22,7 +27,9 @@ class _HomeScreenState extends State<HomeScreen> {
   final _items = <DownloadItem>[];
   final _uuid = const Uuid();
   final _downloadService = DownloadService();
-  String? _saveDir;
+  final _settingsService = SettingsService();
+  AppSettings _settings = AppSettings.defaults;
+  String? _fallbackSaveDir;
   bool _ready = false;
 
   @override
@@ -43,10 +50,13 @@ class _HomeScreenState extends State<HomeScreen> {
     await Permission.storage.request();
     await Permission.manageExternalStorage.request();
 
-    // 저장 경로: /sdcard/Music/MP3Downloader
+    // 저장 경로: /sdcard/Music/MP3Downloader (SAF 미지정 시 폴백)
     final ext = await getExternalStorageDirectory();
-    _saveDir = '${ext?.parent.parent.parent.parent.path ?? '/sdcard'}/Music/MP3Downloader';
-    await Directory(_saveDir!).create(recursive: true);
+    _fallbackSaveDir =
+        '${ext?.parent.parent.parent.parent.path ?? '/sdcard'}/Music/MP3Downloader';
+    await Directory(_fallbackSaveDir!).create(recursive: true);
+
+    _settings = await _settingsService.load();
 
     setState(() => _ready = true);
   }
@@ -62,17 +72,48 @@ class _HomeScreenState extends State<HomeScreen> {
       id: _uuid.v4(),
       url: url,
       title: _shortenUrl(url),
+      format: _settings.format,
+      audioQuality:
+          _settings.format == DownloadFormat.mp3 ? _settings.audioQuality : null,
+      videoQuality:
+          _settings.format == DownloadFormat.mp4 ? _settings.videoQuality : null,
     );
     setState(() => _items.insert(0, item));
     _urlController.clear();
     _downloadService.enqueue(
       item: item,
-      saveDir: _saveDir!,
+      fallbackSaveDir: _fallbackSaveDir!,
+      saveDirUri: _settings.saveDirUri,
       onUpdate: _update,
     );
   }
 
   void _update() => setState(() {});
+
+  void _onFormatChanged(DownloadFormat format) {
+    setState(() => _settings = _settings.copyWith(format: format));
+    _settingsService.save(_settings);
+  }
+
+  void _onAudioQualityChanged(AudioQuality quality) {
+    setState(() => _settings = _settings.copyWith(audioQuality: quality));
+    _settingsService.save(_settings);
+  }
+
+  void _onVideoQualityChanged(VideoQuality quality) {
+    setState(() => _settings = _settings.copyWith(videoQuality: quality));
+    _settingsService.save(_settings);
+  }
+
+  Future<void> _changeSaveLocation() async {
+    final dir = await Saf().pickDirectory();
+    if (dir == null) return;
+    setState(() => _settings = _settings.copyWith(saveDirUri: dir.uri));
+    await _settingsService.save(_settings);
+  }
+
+  String get _saveLocationLabel =>
+      _settings.saveDirUri ?? _fallbackSaveDir ?? '';
 
   void _removeItem(String id) {
     setState(() => _items.removeWhere((e) => e.id == id));
@@ -186,6 +227,28 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ],
                 ),
+              ),
+            ),
+
+            // ── 형식/화질 선택 ─────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+              child: FormatQualitySelector(
+                format: _settings.format,
+                audioQuality: _settings.audioQuality,
+                videoQuality: _settings.videoQuality,
+                onFormatChanged: _onFormatChanged,
+                onAudioQualityChanged: _onAudioQualityChanged,
+                onVideoQualityChanged: _onVideoQualityChanged,
+              ),
+            ),
+
+            // ── 저장 위치 ─────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+              child: SaveLocationBar(
+                displayPath: _saveLocationLabel,
+                onChangePressed: _changeSaveLocation,
               ),
             ),
 
