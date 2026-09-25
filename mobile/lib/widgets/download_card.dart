@@ -116,21 +116,22 @@ class DownloadCard extends StatelessWidget {
 
           // ── 진행률 바 ──────────────────────────────
           if (item.status == DownloadStatus.downloading ||
-              item.status == DownloadStatus.fetching)
+              item.status == DownloadStatus.fetching ||
+              item.status == DownloadStatus.processing)
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(4),
                 child: LinearProgressIndicator(
-                  value: item.status == DownloadStatus.fetching
-                      ? null
-                      : item.progress,
+                  value: item.status == DownloadStatus.downloading
+                      ? item.progress
+                      : null,
                   minHeight: 3,
                   backgroundColor: cs.onSurface.withOpacity(0.08),
                   valueColor: AlwaysStoppedAnimation(
-                    item.status == DownloadStatus.fetching
-                        ? cs.secondary
-                        : cs.primary,
+                    item.status == DownloadStatus.downloading
+                        ? cs.primary
+                        : cs.secondary,
                   ),
                 ),
               ),
@@ -158,6 +159,7 @@ class DownloadCard extends StatelessWidget {
       case DownloadStatus.waiting:     return cs.onSurface.withOpacity(0.06);
       case DownloadStatus.fetching:    return cs.secondary.withOpacity(0.12);
       case DownloadStatus.downloading: return cs.primary.withOpacity(0.12);
+      case DownloadStatus.processing:  return cs.secondary.withOpacity(0.12);
       case DownloadStatus.done:        return cs.secondary.withOpacity(0.15);
       case DownloadStatus.error:       return cs.error.withOpacity(0.12);
     }
@@ -168,6 +170,7 @@ class DownloadCard extends StatelessWidget {
       case DownloadStatus.waiting:     return cs.onSurface.withOpacity(0.4);
       case DownloadStatus.fetching:    return cs.secondary;
       case DownloadStatus.downloading: return cs.primary;
+      case DownloadStatus.processing:  return cs.secondary;
       case DownloadStatus.done:        return cs.secondary;
       case DownloadStatus.error:       return cs.error;
     }
@@ -186,6 +189,12 @@ class DownloadCard extends StatelessWidget {
         );
       case DownloadStatus.downloading:
         return Icon(Icons.downloading_rounded, size: 18, color: cs.primary);
+      case DownloadStatus.processing:
+        return SizedBox(
+          width: 16, height: 16,
+          child: CircularProgressIndicator(
+              strokeWidth: 2, color: cs.secondary),
+        );
       case DownloadStatus.done:
         return Icon(Icons.check_rounded, size: 18, color: cs.secondary);
       case DownloadStatus.error:
