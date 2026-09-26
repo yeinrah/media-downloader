@@ -46,19 +46,30 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _init() async {
-    // 권한
-    await Permission.storage.request();
-    await Permission.manageExternalStorage.request();
+    try {
+      // 권한
+      await Permission.storage.request();
+      await Permission.manageExternalStorage.request();
 
-    // 저장 경로: /sdcard/Music/MP3Downloader (SAF 미지정 시 폴백)
-    final ext = await getExternalStorageDirectory();
-    _fallbackSaveDir =
-        '${ext?.parent.parent.parent.parent.path ?? '/sdcard'}/Music/MP3Downloader';
-    await Directory(_fallbackSaveDir!).create(recursive: true);
+      // 저장 경로: /sdcard/Music/MP3Downloader (SAF 미지정 시 폴백)
+      final ext = await getExternalStorageDirectory();
+      _fallbackSaveDir =
+          '${ext?.parent.parent.parent.parent.path ?? '/sdcard'}/Music/MP3Downloader';
+      await Directory(_fallbackSaveDir!).create(recursive: true);
+    } catch (_) {
+      // "모든 파일 접근" 권한이 없으면 공유 저장소 경로 생성이 실패할 수 있다.
+      // 앱 전용 폴더로 대체해 최소한 다운로드는 가능하게 하고, 사용자가
+      // 저장 위치를 SAF로 직접 지정하도록 안내한다.
+      final ext = await getExternalStorageDirectory();
+      _fallbackSaveDir = ext?.path;
+      if (mounted) {
+        _showSnack('저장 폴더 접근 권한이 없어 앱 전용 폴더를 사용합니다. 설정에서 저장 위치를 지정해 주세요.');
+      }
+    }
 
     _settings = await _settingsService.load();
 
-    setState(() => _ready = true);
+    if (mounted) setState(() => _ready = true);
   }
 
   void _addUrl() {
